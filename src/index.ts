@@ -45,7 +45,7 @@ import {
 	resourceName,
 } from "./provisioner.js";
 import { type Settings, credsOf, readSettings, siteZone, validate } from "./settings.js";
-import { grantCredits, pushCreditsSettings } from "./credits.js";
+import { childSetOptions, grantCredits, pushCreditsSettings } from "./credits.js";
 import { checkoutSessionIdFromEvent, createCheckout, retrieveCheckoutSession } from "./stripe.js";
 import {
 	authorizeUrl,
@@ -385,6 +385,14 @@ async function enableFrontend(
 	await ctx.kv.set(`github:token:${project}`, token);
 	await ctx.kv.set(`github:owner:${project}`, owner);
 	await ctx.kv.set(`github:repo:${project}`, repo);
+	// The child's own copy of the connection: git-backed collections read and
+	// commit to the site repo directly, without a round-trip through here.
+	await childSetOptions(ctx, creds, d1Id, [
+		["github:token", token],
+		["github:owner", owner],
+		["github:repo", repo],
+		["github:branch", "main"],
+	]);
 	return pagesUrl;
 }
 
