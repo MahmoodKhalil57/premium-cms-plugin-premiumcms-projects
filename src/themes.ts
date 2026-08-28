@@ -64,8 +64,9 @@ export async function publishSeed(
 		([path, content]) => ({ path, content }),
 	);
 	if (list.length === 0) throw new Error("seed export returned nothing");
-	// The single-file layout this replaces.
-	list.push({ path: "seed.json", content: null });
+	// The single-file layout this replaces (a tree can't delete a missing path).
+	if (await fetchRepoFile(ctx, owner, repo, "seed.json", gh))
+		list.push({ path: "seed.json", content: null });
 	if (!(await fetchRepoFile(ctx, owner, repo, "content/README.md", gh)))
 		list.push({ path: "content/README.md", content: CONTENT_README });
 
