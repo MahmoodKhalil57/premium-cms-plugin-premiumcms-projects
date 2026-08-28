@@ -1,0 +1,37 @@
+{
+	"name": "@premium-cms/plugin-premiumcms-projects",
+	"version": "0.2.0",
+	"type": "module",
+	"description": "PremiumCMS control-plane plugin (trusted, in-process): provisions isolated instances on Cloudflare, themes-as-repos, plugins-as-repos, custom domains, credits",
+	"main": "./src/index.ts",
+	"exports": {
+		".": "./src/index.ts"
+	},
+	"files": [
+		"src"
+	],
+	"scripts": {
+		"typecheck": "tsc --noEmit",
+		"test": "vitest run"
+	},
+	"peerDependencies": {
+		"@premium-cms/emdash": "^0.35.18"
+	},
+	"devDependencies": {
+		"@premium-cms/emdash": "^0.35.18",
+		"typescript": "^6.0.3",
+		"vitest": "^4.1.5"
+	},
+	"dependencies": {
+		"blakejs": "^1.2.1",
+		"tweetnacl": "^1.0.3"
+	},
+	"license": "MIT",
+	"repository": {
+		"type": "git",
+		"url": "https://github.com/MahmoodKhalil57/premium-cms-plugin-premiumcms-projects"
+	},
+	"publishConfig": {
+		"access": "public"
+	}
+}

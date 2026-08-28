@@ -1,0 +1,34 @@
+# Publish to npm on every push to main. This is a TRUSTED, in-process plugin:
+# the instance golden bundle depends on @premium-cms/plugin-premiumcms-projects
+# from npm, so a release here reaches every instance on the next image roll.
+# Bump the version in package.json to release. Secret: NPM_TOKEN.
+name: Publish to npm
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          registry-url: https://registry.npmjs.org
+      - run: bun install
+      - run: bunx tsc --noEmit
+      - name: Publish if the version is new
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          set -euo pipefail
+          NAME=$(node -p "require('./package.json').name"); VERSION=$(node -p "require('./package.json').version")
+          if npm view "$NAME@$VERSION" version >/dev/null 2>&1; then echo "$NAME@$VERSION already published"; exit 0; fi
+          npm publish --access public
+          echo "published $NAME@$VERSION"
