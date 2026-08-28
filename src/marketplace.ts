@@ -129,3 +129,13 @@ export async function createPluginListing(
 		return { created: false, error: `plugin id "${plugin.id}" is already taken` };
 	return { created: false, error: `marketplace ${r.status}: ${r.text.slice(0, 160)}` };
 }
+
+/** Remove a theme listing as the trusted publisher (no-op when absent). */
+export async function deleteTheme(ctx: PluginContext, settings: Settings, id: string): Promise<boolean> {
+	if (!settings.marketplaceSeedToken) return false;
+	const r = await http(ctx, `${base(settings)}/themes/${encodeURIComponent(id)}`, {
+		method: "DELETE",
+		headers: { Authorization: `Bearer ${settings.marketplaceSeedToken}` },
+	});
+	return r.ok;
+}

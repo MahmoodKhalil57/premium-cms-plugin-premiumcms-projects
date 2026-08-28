@@ -35,7 +35,10 @@ import {
 import { pushCreditsSettings, seedInitialCredits } from "./credits.js";
 import { COLLECTION } from "./content.js";
 import { mintPlatformToken } from "./platform.js";
-import { applyThemeSeed } from "./themes.js";
+import { applyThemeSeed, themeIdFor } from "./themes.js";
+import { deleteCustomHostname, findCustomHostname, hostnamesRoutedTo, unmapDomain } from "./domains.js";
+import { deleteTheme } from "./marketplace.js";
+import { forgetPlatformToken } from "./platform.js";
 import { credsOf, siteZone, type Settings } from "./settings.js";
 
 /** ULID: 26 Crockford base32 chars (no I, L, O, U), case-insensitive. */
@@ -329,6 +332,27 @@ export async function destroyProject(
 	const removed: string[] = [];
 	const warnings: string[] = [];
 
+	// Customer domains routed to this instance (Cloudflare for SaaS): the
+	// router entry and the custom hostname go with it.
+	if (settings.customDomainsKvId) {
+		try {
+			const zone = (await resolveZone(ctx, creds, siteZone(ctx))).name;
+			const zoneId = await cfZoneId(ctx, creds, zone);
+			const wd = await cfApi<Array<{ hostname: string; service: string }>>(ctx, creds, "GET", "/workers/domains");
+			const homes = (wd.result ?? []).filter((d) => d.service === rn).map((d) => d.hostname);
+			for (const home of [...new Set([`${rn}.${zone}`, ...homes])]) {
+				for (const host of await hostnamesRoutedTo(ctx, creds, settings.customDomainsKvId, home)) {
+					const ch = await findCustomHostname(ctx, creds, zoneId, host);
+					if (ch) await deleteCustomHostname(ctx, creds, zoneId, ch.id);
+					await unmapDomain(ctx, creds, settings.customDomainsKvId, host);
+					removed.push(`custom domain ${host}`);
+				}
+			}
+		} catch (err) {
+			warnings.push(`custom domains: ${err instanceof Error ? err.message : String(err)}`);
+		}
+	}
+
 	// Custom domain(s) bound to this worker (service === rn).
 	const wd = await cfApi<Array<{ id: string; hostname: string; service: string }>>(
 		ctx,
@@ -376,6 +400,23 @@ export async function destroyProject(
 		if (d1.success) removed.push("D1 database");
 		else warnings.push(`D1: ${JSON.stringify(d1.errors)}`);
 	}
+
+	// Marketplace listing (when it was a theme) and what this control plane
+	// kept about it. The site repo stays: it's the owner's, on their GitHub.
+	try {
+		const row = ctx.content?.get ? await ctx.content.get(COLLECTION, id).catch(() => null) : null;
+		const data = (row?.data ?? {}) as Record<string, unknown>;
+		const label = typeof data.label === "string" ? data.label : "";
+		const themeId = label ? themeIdFor({ id, data }) : `t-${id.toLowerCase()}`;
+		if (await deleteTheme(ctx, settings, themeId)) removed.push(`theme listing ${themeId}`);
+	} catch (err) {
+		warnings.push(`listing: ${err instanceof Error ? err.message : String(err)}`);
+	}
+	for (const key of [`github:token:${id}`, `github:owner:${id}`, `github:repo:${id}`]) {
+		await ctx.kv.delete(key);
+	}
+	await forgetPlatformToken(ctx, id);
+	removed.push("stored tokens");
 
 	return { removed, warnings };
 }

@@ -209,3 +209,21 @@ export async function remapDomains(
 	}
 	return moved;
 }
+
+/** Router entries (customer hostnames) currently pointing at `origin`. */
+export async function hostnamesRoutedTo(
+	ctx: PluginContext,
+	creds: CfCreds,
+	kvId: string,
+	origin: string,
+): Promise<string[]> {
+	const base = `${CF}/accounts/${creds.accountId}/storage/kv/namespaces/${kvId}`;
+	const auth = { Authorization: `Bearer ${creds.apiToken}` };
+	const list = await http(ctx, `${base}/keys?limit=1000`, { headers: auth });
+	const out: string[] = [];
+	for (const { name } of list.json<{ result?: Array<{ name: string }> }>().result ?? []) {
+		const cur = await http(ctx, `${base}/values/${encodeURIComponent(name)}`, { headers: auth });
+		if (cur.ok && cur.text.trim() === origin) out.push(name);
+	}
+	return out;
+}

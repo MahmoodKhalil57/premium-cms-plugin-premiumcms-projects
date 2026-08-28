@@ -542,6 +542,11 @@ export function createPlugin(): ResolvedPlugin {
 							`[premiumcms-projects] torn down ${event.id}: removed [${removed.join(", ")}]` +
 								(warnings.length ? ` warnings [${warnings.join("; ")}]` : ""),
 						);
+						// Teardown is complete and permanent: a trashed row would claim a
+						// project that no longer exists, so the row goes with it.
+						const permanent = (event as { permanent?: boolean }).permanent === true;
+						const content = ctx.content as { permanentDelete?: (c: string, i: string) => Promise<boolean> } | undefined;
+						if (!permanent && content?.permanentDelete) await content.permanentDelete(COLLECTION, event.id);
 					} catch (err) {
 						ctx.log.error(`[premiumcms-projects] teardown for ${event.id} failed`, err);
 					}
