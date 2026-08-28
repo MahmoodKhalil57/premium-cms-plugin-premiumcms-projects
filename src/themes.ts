@@ -8,7 +8,7 @@
  */
 
 import type { PluginContext } from "@premium-cms/emdash/plugin";
-import { parseRepoUrl, pushFiles, setTemplateRepo } from "./github.js";
+import { fetchRepoFile, parseRepoUrl, pushFiles, setTemplateRepo } from "./github.js";
 import { getTheme, upsertTheme } from "./marketplace.js";
 import { childApi, platformToken } from "./platform.js";
 import type { Settings } from "./settings.js";
@@ -25,15 +25,27 @@ export function themeIdFor(row: { id: string; data: Record<string, unknown> }): 
 	return /^[a-z]/.test(label) ? label : `t-${row.id.toLowerCase()}`;
 }
 
+const CONTENT_README = `# content/
+
+Git-tier content: entries of collections with \`storage: "git"\`
+(\`content/<collection>/<slug>.json\`) and plugin data declared git-backed
+(\`content/<pluginId>/<collection>/<id>.json\`, e.g. form definitions).
+
+Saving in the admin commits here; editing a file here is picked up on the
+next read. The static build renders these files directly. Frequently edited
+or sensitive data stays in the database, and test data lives in \`seed/\`.
+`;
+
 /**
- * Export the project's seed into its repo and (re)register the listing.
- * Returns what happened; throws when the project can't be a theme yet.
+ * Export the project's seed into its repo as the \`seed/\` directory (and
+ * scaffold \`content/\`). Every connected project gets this — the repo is the
+ * whole site — whether or not it is listed as a theme.
  */
-export async function publishTheme(
+export async function publishSeed(
 	ctx: PluginContext,
 	settings: Settings,
 	row: { id: string; data: Record<string, unknown> },
-): Promise<string> {
+): Promise<{ owner: string; repo: string; gh: string; files: number }> {
 	const project = row.id;
 	const url = str(row.data.url);
 	if (!url) throw new Error("not provisioned yet");
@@ -54,13 +66,29 @@ export async function publishTheme(
 	if (list.length === 0) throw new Error("seed export returned nothing");
 	// The single-file layout this replaces.
 	list.push({ path: "seed.json", content: null });
+	if (!(await fetchRepoFile(ctx, owner, repo, "content/README.md", gh)))
+		list.push({ path: "content/README.md", content: CONTENT_README });
 
-	const push = await pushFiles(ctx, gh, owner, repo, list, "chore: publish theme seed");
-	if (!push.ok) throw new Error(push.error || "could not commit seed.json");
+	const push = await pushFiles(ctx, gh, owner, repo, list, "chore: publish seed");
+	if (!push.ok) throw new Error(push.error || "could not commit seed/");
+	return { owner, repo, gh, files: list.length };
+}
+
+/**
+ * Publish the project as a marketplace theme: its seed into its repo, the
+ * repo as a template, the listing. Throws when it can't be a theme yet.
+ */
+export async function publishTheme(
+	ctx: PluginContext,
+	settings: Settings,
+	row: { id: string; data: Record<string, unknown> },
+): Promise<string> {
+	const { owner, repo, gh } = await publishSeed(ctx, settings, row);
 	const tpl = await setTemplateRepo(ctx, gh, owner, repo, true);
 	if (!tpl.ok) throw new Error(tpl.error || "could not mark the repo as a template");
 
 	const id = themeIdFor(row);
+	const url = str(row.data.url);
 	await upsertTheme(ctx, settings, {
 		id,
 		name: str(row.data.label) || id,

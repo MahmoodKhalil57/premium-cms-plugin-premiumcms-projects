@@ -11,8 +11,9 @@
  *              update-on-conflict, via the child's reseed route
  *   frontend — sync the theme's frontend template repo into the child's site
  *              repo (template-owned paths only) and rebuild Pages
- *   theme    — for projects marked "Is theme / demo": re-export their seed
- *              into their repo and refresh the marketplace listing
+ *   theme    — export the project's seed into its repo (seed/ + content/);
+ *              for projects marked "Is theme / demo" also refresh the
+ *              marketplace listing
  *
  * Children that are not control planes answer the cascade with `skipped`.
  */
@@ -24,7 +25,7 @@ import { dispatchRebuild, syncTemplate, templateForTheme } from "./github.js";
 import { childApi, platformToken } from "./platform.js";
 import { isUlid, projectBindings, resourceName } from "./provisioner.js";
 import { credsOf, type Settings } from "./settings.js";
-import { applyThemeSeed, publishTheme } from "./themes.js";
+import { applyThemeSeed, publishSeed, publishTheme } from "./themes.js";
 
 export const ROLL_STEPS = ["bundle", "plugins", "seed", "frontend", "theme"] as const;
 export type RollStep = (typeof ROLL_STEPS)[number];
@@ -237,6 +238,9 @@ async function rollFrontend(ctx: PluginContext, settings: Settings, t: Target): 
 }
 
 async function rollTheme(ctx: PluginContext, settings: Settings, t: Target): Promise<string> {
-	if (!t.row.data.is_theme) return "skipped (not a theme)";
-	return publishTheme(ctx, settings, t.row);
+	if (t.row.data.is_theme) return publishTheme(ctx, settings, t.row);
+	const gh = str(await ctx.kv.get(`github:token:${t.id}`));
+	if (!gh) return "skipped (frontend not connected)";
+	const r = await publishSeed(ctx, settings, t.row);
+	return `seed published (${r.files} files) to ${r.owner}/${r.repo}`;
 }
