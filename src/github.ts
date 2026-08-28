@@ -152,7 +152,7 @@ export async function pushFiles(
 	token: string,
 	owner: string,
 	repo: string,
-	files: Array<{ path: string; content: string; encoding?: "utf-8" | "base64" }>,
+	files: Array<{ path: string; content: string | null; encoding?: "utf-8" | "base64" }>,
 	message: string,
 	branch = "main",
 ): Promise<{ ok: boolean; error?: string }> {
@@ -162,8 +162,13 @@ export async function pushFiles(
 	const baseCommit = await gh(ctx, token, "GET", `/repos/${owner}/${repo}/git/commits/${baseSha}`);
 	const baseTree = baseCommit.json<{ tree: { sha: string } }>().tree.sha;
 
-	const tree: Array<{ path: string; mode: string; type: string; sha: string }> = [];
+	const tree: Array<{ path: string; mode: string; type: string; sha: string | null }> = [];
 	for (const f of files) {
+		// `content: null` deletes the path.
+		if (f.content === null) {
+			tree.push({ path: f.path, mode: "100644", type: "blob", sha: null });
+			continue;
+		}
 		const blob = await gh(ctx, token, "POST", `/repos/${owner}/${repo}/git/blobs`, {
 			content: f.content,
 			encoding: f.encoding ?? "utf-8",

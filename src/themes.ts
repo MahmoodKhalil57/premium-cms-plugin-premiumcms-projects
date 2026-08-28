@@ -8,7 +8,7 @@
  */
 
 import type { PluginContext } from "@premium-cms/emdash/plugin";
-import { fetchRepoFile, parseRepoUrl, pushFiles, setTemplateRepo } from "./github.js";
+import { parseRepoUrl, pushFiles, setTemplateRepo } from "./github.js";
 import { getTheme, upsertTheme } from "./marketplace.js";
 import { childApi, platformToken } from "./platform.js";
 import type { Settings } from "./settings.js";
@@ -44,19 +44,18 @@ export async function publishTheme(
 	const repo = str(await ctx.kv.get(`github:repo:${project}`));
 	if (!gh || !owner || !repo) throw new Error("frontend not connected (no site repo)");
 
-	const res = await childApi(ctx, url, token, "GET", "/_emdash/api/settings/seed/export");
+	// The seed as a directory (seed/** with JSON schemas), one file per thing.
+	const res = await childApi(ctx, url, token, "GET", "/_emdash/api/settings/seed/export?format=tree");
 	if (!res.ok) throw new Error(`seed export ${res.status}`);
-	const seed = res.json<{ data?: unknown }>().data;
-	if (!seed || typeof seed !== "object") throw new Error("seed export returned nothing");
-
-	const push = await pushFiles(
-		ctx,
-		gh,
-		owner,
-		repo,
-		[{ path: "seed.json", content: `${JSON.stringify(seed, null, "\t")}\n` }],
-		"chore: publish theme seed",
+	const files = res.json<{ data?: { files?: Record<string, string> } }>().data?.files ?? {};
+	const list: Array<{ path: string; content: string | null }> = Object.entries(files).map(
+		([path, content]) => ({ path, content }),
 	);
+	if (list.length === 0) throw new Error("seed export returned nothing");
+	// The single-file layout this replaces.
+	list.push({ path: "seed.json", content: null });
+
+	const push = await pushFiles(ctx, gh, owner, repo, list, "chore: publish theme seed");
 	if (!push.ok) throw new Error(push.error || "could not commit seed.json");
 	const tpl = await setTemplateRepo(ctx, gh, owner, repo, true);
 	if (!tpl.ok) throw new Error(tpl.error || "could not mark the repo as a template");
@@ -99,23 +98,21 @@ export async function applyThemeSeed(
 ): Promise<string | null> {
 	const repo = await themeRepo(ctx, settings, themeId);
 	if (!repo) return null;
-	const gh = str(await ctx.kv.get(`github:token:${project}`)) || undefined;
-	const text = await fetchRepoFile(ctx, repo.owner, repo.repo, "seed.json", gh);
-	if (!text) return null;
 	const token = await platformToken(ctx, project);
 	if (!token) throw new Error("no platform token");
-	const res = await childApi(
-		ctx,
-		projectUrl,
-		token,
-		"POST",
-		"/_emdash/api/settings/seed/apply",
-		JSON.parse(text),
-	);
+	// The child downloads the theme repo's archive itself and composes the
+	// seed from its seed/ directory (or a legacy seed.json).
+	const res = await childApi(ctx, projectUrl, token, "POST", "/_emdash/api/settings/seed/apply-repo", {
+		owner: repo.owner,
+		repo: repo.repo,
+	});
 	if (!res.ok) throw new Error(`seed apply ${res.status}: ${res.text.slice(0, 120)}`);
-	const d =
-		res.json<{ data?: Record<string, { created?: number; updated?: number }> }>().data ?? {};
-	const c = Object.values(d).reduce((n, v) => n + (v?.created ?? 0), 0);
-	const u = Object.values(d).reduce((n, v) => n + (v?.updated ?? 0), 0);
+	const d = res.json<{ data?: Record<string, unknown> }>().data ?? {};
+	if (d.applied === false) return null;
+	const counts = Object.values(d).filter(
+		(v): v is { created?: number; updated?: number } => !!v && typeof v === "object",
+	);
+	const c = counts.reduce((n, v) => n + (v.created ?? 0), 0);
+	const u = counts.reduce((n, v) => n + (v.updated ?? 0), 0);
 	return `theme "${themeId}" seed applied (${c} created, ${u} updated)`;
 }
