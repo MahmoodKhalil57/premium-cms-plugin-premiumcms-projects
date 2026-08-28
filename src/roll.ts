@@ -25,7 +25,7 @@ import { dispatchRebuild, syncTemplate, templateForTheme } from "./github.js";
 import { childApi, platformToken } from "./platform.js";
 import { isUlid, projectBindings, resourceName } from "./provisioner.js";
 import { credsOf, type Settings } from "./settings.js";
-import { applyThemeSeed, publishSeed, publishTheme } from "./themes.js";
+import { applyThemeSeed, publishSeed, publishTheme, themeRepo } from "./themes.js";
 
 export const ROLL_STEPS = ["bundle", "plugins", "seed", "frontend", "theme"] as const;
 export type RollStep = (typeof ROLL_STEPS)[number];
@@ -229,8 +229,14 @@ async function rollFrontend(ctx: PluginContext, settings: Settings, t: Target): 
 	const owner = str(await ctx.kv.get(`github:owner:${t.id}`));
 	const repo = str(await ctx.kv.get(`github:repo:${t.id}`));
 	if (!gh || !owner || !repo) return "skipped (frontend not connected)";
-	const template = templateForTheme(settings.githubFrontendTemplate, t.theme);
-	if (!template) throw new Error(`no frontend template for theme "${t.theme}"`);
+	// Tooling comes from where the site repo was generated: the theme's repo
+	// (a theme is the source, so it syncs from the base template instead).
+	const fromTheme =
+		t.theme && !t.row.data.is_theme ? await themeRepo(ctx, settings, t.theme).catch(() => null) : null;
+	const template = fromTheme
+		? `${fromTheme.owner}/${fromTheme.repo}`
+		: templateForTheme(settings.githubFrontendTemplate, t.theme);
+	if (!template) return "skipped (no template repo to sync tooling from)";
 	const sync = await syncTemplate(ctx, gh, template, owner, repo);
 	if (!sync.ok) throw new Error(sync.error || "template sync failed");
 	if (sync.changed > 0) await dispatchRebuild(ctx, gh, owner, repo);

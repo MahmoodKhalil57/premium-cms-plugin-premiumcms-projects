@@ -305,7 +305,7 @@ async function enableFrontend(
 	const row = ctx.content?.get ? await ctx.content.get(COLLECTION, project) : null;
 	const rowData = (row?.data ?? {}) as Record<string, unknown>;
 	const label = str(rowData.label);
-	const theme = str(rowData.theme) || "marketing";
+	const theme = str(rowData.theme);
 
 	// A theme is a repo: the site repo is generated from the marketplace theme's
 	// repository. The settings map is only a fallback for themes without one.
