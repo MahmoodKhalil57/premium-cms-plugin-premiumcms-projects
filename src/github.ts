@@ -293,10 +293,14 @@ async function repoTree(
 	return out;
 }
 
+/** The build tooling a template repo owns in every site repo generated from it. */
+const TOOLING_PATHS = /^(bin\/|\.github\/workflows\/)/;
+
 /**
- * Copy the template repo's current files into a generated site repo: every
- * path the template owns whose blob differs (or is missing) is committed;
- * files the site added on its own are left alone. Returns how many changed.
+ * Copy the template repo's build tooling into a site repo: every tooling path
+ * whose blob differs (or is missing) is committed. Everything else — seed,
+ * content, sources, config — belongs to the site (a theme's repo IS its
+ * source) and is never touched. Returns how many files changed.
  */
 export async function syncTemplate(
 	ctx: PluginContext,
@@ -311,7 +315,7 @@ export async function syncTemplate(
 
 	const files: Array<{ path: string; content: string; encoding: "base64" }> = [];
 	for (const [path, sha] of src) {
-		if (dst.get(path) === sha) continue;
+		if (!TOOLING_PATHS.test(path) || dst.get(path) === sha) continue;
 		const blob = await gh(ctx, token, "GET", `/repos/${template}/git/blobs/${sha}`);
 		if (!blob.ok) return { ok: false, changed: 0, error: `blob ${path}: ${blob.status}` };
 		const content = blob.json<{ content?: string }>().content ?? "";
