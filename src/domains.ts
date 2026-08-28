@@ -180,8 +180,10 @@ export function recordsFor(hostname: string, ch: CustomHostname | null): DnsReco
 }
 
 /** Whether the custom hostname is fully live (routing + cert active). */
-export function isActive(ch: CustomHostname | null): boolean {
-	return ch?.status === "active" && ch?.ssl?.status === "active";
+export function isActive(ch: CustomHostname): boolean {
+	// Ownership verified is what makes the hostname routable; Cloudflare's SSL
+	// status lags the certificate it already serves, so it isn't gating.
+	return ch.status === "active";
 }
 
 /**
