@@ -63,8 +63,8 @@ export async function mintPlatformToken(
 		ctx,
 		creds,
 		d1Id,
-		"INSERT INTO _emdash_api_tokens (id,name,token_hash,prefix,user_id,scopes,created_at) VALUES (?,?,?,?,?,?,datetime('now'))",
-		[id, "PremiumCMS platform", hash, raw.slice(0, 11), userId, JSON.stringify(["admin"])],
+		"INSERT INTO _emdash_api_tokens (id,name,token_hash,prefix,user_id,scopes,policies,created_at) VALUES (?,?,?,?,?,?,?,datetime('now'))",
+		[id, "PremiumCMS platform", hash, raw.slice(0, 11), userId, "[]", JSON.stringify(["core-admin"])],
 	);
 	if (!ins.success) throw new Error(`platform token insert failed: ${JSON.stringify(ins.errors)}`);
 	await ctx.kv.set(tokenKey(project), raw);
