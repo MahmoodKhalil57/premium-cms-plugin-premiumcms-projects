@@ -294,7 +294,7 @@ async function repoTree(
 }
 
 /** The build tooling a template repo owns in every site repo generated from it. */
-const TOOLING_PATHS = /^(bin\/|\.github\/workflows\/|tests\/ci\/)/;
+const TOOLING_PATHS = /^(bin\/|\.github\/workflows\/|tests\/ci\/|tests\/preview\/)/;
 /**
  * Tooling the platform has retired: removed from site repos when present.
  * The static site is built by the platform (GitHub Agent plugin → container)
