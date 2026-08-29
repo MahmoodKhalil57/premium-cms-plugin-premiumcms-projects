@@ -294,7 +294,7 @@ async function repoTree(
 }
 
 /** The build tooling a template repo owns in every site repo generated from it. */
-const TOOLING_PATHS = /^(bin\/|\.github\/workflows\/)/;
+const TOOLING_PATHS = /^(bin\/|\.github\/workflows\/|tests\/ci\/)/;
 
 /**
  * Copy the template repo's build tooling into a site repo: every tooling path

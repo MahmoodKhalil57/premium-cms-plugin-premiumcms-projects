@@ -413,9 +413,15 @@ const GITHUB_CASCADE_PATH = "/_emdash/api/plugins/premiumcms-projects/githubEven
  * children without the plugin answer 404 and are ignored.
  */
 async function forwardGithubEvent(ctx: PluginContext, input: unknown): Promise<Record<string, unknown>> {
-	const body = (input ?? {}) as { repository?: { full_name?: unknown }; issue?: unknown };
+	const body = (input ?? {}) as {
+		repository?: { full_name?: unknown };
+		issue?: unknown;
+		pull_request?: unknown;
+	};
 	const fullName = str(body.repository?.full_name).toLowerCase();
-	if (!fullName || !body.issue) return { success: true, ignored: "not an issue event" };
+	if (!fullName || (!body.issue && !body.pull_request)) {
+		return { success: true, ignored: "not an issue or pull request event" };
+	}
 
 	for (const row of await listProjectRows(ctx)) {
 		if (!isUlid(row.id)) continue;
@@ -692,7 +698,7 @@ export function createPlugin(): ResolvedPlugin {
 			 */
 			/**
 			 * GitHub App webhook (the platform owns the App, so every customer
-			 * repo's events land here). Routes an `issues` event to the project
+			 * repo's events land here). Routes an issue / pull-request event to the project
 			 * whose site repo it belongs to, cascading through child control
 			 * planes; the site's GitHub Agent plugin re-reads the issue itself.
 			 * Routes never see raw bytes, so the URL key stands in for the HMAC.
