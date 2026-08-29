@@ -295,6 +295,12 @@ async function repoTree(
 
 /** The build tooling a template repo owns in every site repo generated from it. */
 const TOOLING_PATHS = /^(bin\/|\.github\/workflows\/|tests\/ci\/)/;
+/**
+ * Tooling the platform has retired: removed from site repos when present.
+ * The static site is built by the platform (GitHub Agent plugin → container)
+ * and served from `static/<default branch>`, so the Actions workflow is gone.
+ */
+const TOOLING_REMOVED = [".github/workflows/deploy.yml", "bin/apply-seed.mjs"];
 
 /**
  * Copy the template repo's build tooling into a site repo: every tooling path
@@ -321,10 +327,18 @@ export async function syncTemplate(
 		const content = blob.json<{ content?: string }>().content ?? "";
 		files.push({ path, content: content.replace(/\n/g, ""), encoding: "base64" });
 	}
-	if (files.length === 0) return { ok: true, changed: 0 };
-	const push = await pushFiles(ctx, token, owner, repo, files, "chore: sync frontend template");
+	const removals = TOOLING_REMOVED.filter((path) => dst.has(path) && !src.has(path));
+	if (files.length === 0 && removals.length === 0) return { ok: true, changed: 0 };
+	const push = await pushFiles(
+		ctx,
+		token,
+		owner,
+		repo,
+		[...files, ...removals.map((path) => ({ path, content: null }))],
+		"chore: sync frontend template",
+	);
 	return push.ok
-		? { ok: true, changed: files.length }
+		? { ok: true, changed: files.length + removals.length }
 		: { ok: false, changed: 0, error: push.error };
 }
 

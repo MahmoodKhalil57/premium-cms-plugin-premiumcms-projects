@@ -419,10 +419,11 @@ async function forwardGithubEvent(ctx: PluginContext, input: unknown): Promise<R
 		repository?: { full_name?: unknown };
 		issue?: unknown;
 		pull_request?: unknown;
+		ref?: unknown;
 	};
 	const fullName = str(body.repository?.full_name).toLowerCase();
-	if (!fullName || (!body.issue && !body.pull_request)) {
-		return { success: true, ignored: "not an issue or pull request event" };
+	if (!fullName || (!body.issue && !body.pull_request && typeof body.ref !== "string")) {
+		return { success: true, ignored: "not an issue, pull request or push event" };
 	}
 
 	for (const row of await listProjectRows(ctx)) {
