@@ -307,7 +307,9 @@ async function enableFrontend(
 	if (!d1Id) throw new Error("child D1 not found — is the project provisioned?");
 	const kvId = await findKvIdByName(ctx, creds, `${rn}-session`);
 	const zone = (await resolveZone(ctx, creds, siteZone(ctx))).name;
-	const backendUrl = `https://${rn}.${zone}`;
+	// The child's canonical origin: a platform/custom domain when one is
+	// assigned, else the default hostname.
+	const backendUrl = str(rowData.url).replace(/\/+$/, "") || `https://${rn}.${zone}`;
 	const repo = `site-${project.toLowerCase()}`;
 	const row = ctx.content?.get ? await ctx.content.get(COLLECTION, project) : null;
 	const rowData = (row?.data ?? {}) as Record<string, unknown>;
