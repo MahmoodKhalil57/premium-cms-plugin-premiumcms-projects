@@ -39,6 +39,8 @@ export interface Settings {
 	 */
 	stripeSecretKey: string;
 	stripeWebhookSecret: string;
+	/** Key GitHub must present (`?key=`) on the App webhook URL; forwarded events go to the child that owns the repo. */
+	githubWebhookSecret: string;
 	creditsMarkup: number;
 	creditsEnforce: boolean;
 	/**
@@ -129,6 +131,7 @@ export async function readSettings(ctx: PluginContext): Promise<Settings> {
 			emailFrom: asString(map.emailFrom).trim(),
 			stripeSecretKey: asString(map.stripeSecretKey),
 			stripeWebhookSecret: asString(map.stripeWebhookSecret),
+			githubWebhookSecret: asString(map.githubWebhookSecret),
 			creditsMarkup: asNumber(map.creditsMarkup, 2),
 			creditsEnforce: asBoolean(map.creditsEnforce, false),
 			githubAppId: asString(map.githubAppId).trim(),
@@ -159,6 +162,7 @@ export async function readSettings(ctx: PluginContext): Promise<Settings> {
 			emailFrom: "",
 			stripeSecretKey: "",
 			stripeWebhookSecret: "",
+			githubWebhookSecret: "",
 			creditsMarkup: 2,
 			creditsEnforce: false,
 			githubAppId: "",

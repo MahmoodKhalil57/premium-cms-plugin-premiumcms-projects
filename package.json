@@ -1,6 +1,6 @@
 {
 	"name": "@premium-cms/plugin-premiumcms-projects",
-	"version": "0.2.8",
+	"version": "0.2.9",
 	"type": "module",
 	"description": "PremiumCMS control-plane plugin (trusted, in-process): provisions isolated instances on Cloudflare, themes-as-repos, plugins-as-repos, custom domains, credits",
 	"main": "./src/index.ts",

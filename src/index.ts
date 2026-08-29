@@ -37,6 +37,7 @@ import { definePlugin } from "@premium-cms/emdash";
 type SettingsSchema = NonNullable<PluginAdminConfig["settingsSchema"]>;
 
 import { COLLECTION, fieldsOf, listProjectRows } from "./content.js";
+import { childApi, platformToken } from "./platform.js";
 import {
 	destroyProject,
 	isUlid,
@@ -187,6 +188,12 @@ const SETTINGS_SCHEMA: SettingsSchema = {
 		label: "GitHub App private key (PEM)",
 		description:
 			"The App's private key — required to mint installation tokens for automated repo / Pages / secret setup. Paste the full -----BEGIN…END----- PEM.",
+	},
+	githubWebhookSecret: {
+		type: "secret",
+		label: "GitHub App webhook key",
+		description:
+			"Set the App's webhook URL to <this site>/_emdash/api/plugins/premiumcms-projects/githubWebhook?key=<this value> and subscribe it to Issues events. Events are forwarded to the project whose site repo they belong to.",
 	},
 	githubInstallUrl: {
 		type: "url",
@@ -394,6 +401,48 @@ async function enableFrontend(
 		["github:branch", "main"],
 	]);
 	return pagesUrl;
+}
+
+
+const GITHUB_EVENT_PATH = "/_emdash/api/plugins/premium-github-agent/webhook";
+const GITHUB_CASCADE_PATH = "/_emdash/api/plugins/premiumcms-projects/githubEvent";
+
+/**
+ * Deliver a GitHub `issues` event to the project whose site repo it is about.
+ * Unknown repos cascade to every child (a child control plane repeats this);
+ * children without the plugin answer 404 and are ignored.
+ */
+async function forwardGithubEvent(ctx: PluginContext, input: unknown): Promise<Record<string, unknown>> {
+	const body = (input ?? {}) as { repository?: { full_name?: unknown }; issue?: unknown };
+	const fullName = str(body.repository?.full_name).toLowerCase();
+	if (!fullName || !body.issue) return { success: true, ignored: "not an issue event" };
+
+	for (const row of await listProjectRows(ctx)) {
+		if (!isUlid(row.id)) continue;
+		const owner = str(await ctx.kv.get(`github:owner:${row.id}`));
+		const repo = str(await ctx.kv.get(`github:repo:${row.id}`));
+		if (!owner || !repo || `${owner}/${repo}`.toLowerCase() !== fullName) continue;
+		const url = str(row.data.url);
+		const token = await platformToken(ctx, row.id).catch(() => "");
+		if (!url || !token) return { success: false, error: `project ${row.id} has no platform token` };
+		const r = await childApi(ctx, url, token, "POST", GITHUB_EVENT_PATH, input);
+		return { success: r.ok, project: row.id, status: r.status, result: r.text.slice(0, 300) };
+	}
+
+	const tried: string[] = [];
+	for (const row of await listProjectRows(ctx)) {
+		if (!isUlid(row.id)) continue;
+		const url = str(row.data.url);
+		const token = await platformToken(ctx, row.id).catch(() => "");
+		if (!url || !token) continue;
+		const r = await childApi(ctx, url, token, "POST", GITHUB_CASCADE_PATH, input);
+		tried.push(`${row.id}:${r.status}`);
+		if (r.ok) {
+			const inner = r.json<{ data?: { project?: string; ignored?: string } }>().data;
+			if (inner?.project) return { success: true, via: row.id, project: inner.project };
+		}
+	}
+	return { success: true, ignored: `no project owns ${fullName}`, cascade: tried };
 }
 
 // ─── Plugin Descriptor (for a theme's `plugins: [...]` config) ───
@@ -641,6 +690,30 @@ export function createPlugin(): ResolvedPlugin {
 			 * child's ledger. Idempotent: the Stripe session id is the ledger ref,
 			 * so a redelivered event does not double-credit.
 			 */
+			/**
+			 * GitHub App webhook (the platform owns the App, so every customer
+			 * repo's events land here). Routes an `issues` event to the project
+			 * whose site repo it belongs to, cascading through child control
+			 * planes; the site's GitHub Agent plugin re-reads the issue itself.
+			 * Routes never see raw bytes, so the URL key stands in for the HMAC.
+			 */
+			githubWebhook: {
+				public: true,
+				handler: async (ctx) => {
+					const settings = await readSettings(ctx);
+					const key = new URL(ctx.request.url).searchParams.get("key") ?? "";
+					if (!settings.githubWebhookSecret || key !== settings.githubWebhookSecret) {
+						return { success: false, error: "unauthorized" };
+					}
+					return forwardGithubEvent(ctx, ctx.input);
+				},
+			},
+
+			/** The same event, handed down by a parent control plane (platform-authenticated). */
+			githubEvent: {
+				handler: async (ctx) => forwardGithubEvent(ctx, ctx.input),
+			},
+
 			billingWebhook: {
 				public: true,
 				handler: async (ctx) => {
