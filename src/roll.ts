@@ -23,7 +23,7 @@ import { deployService, findD1IdByName, findKvIdByName } from "./cf.js";
 import { listProjectRows } from "./content.js";
 import { dispatchRebuild, syncTemplate, templateForTheme } from "./github.js";
 import { childApi, platformToken } from "./platform.js";
-import { isUlid, projectBindings, resourceName } from "./provisioner.js";
+import { isUlid, projectBindings, resourceName, runtimeDeployFields } from "./provisioner.js";
 import { credsOf, type Settings } from "./settings.js";
 import { applyThemeSeed, publishSeed, publishTheme, themeRepo } from "./themes.js";
 
@@ -173,6 +173,7 @@ async function rollBundle(ctx: PluginContext, settings: Settings, t: Target): Pr
 		version: "latest",
 		bindings,
 		cron: "* * * * *",
+		...runtimeDeployFields(),
 	});
 	return `deployed ${settings.instanceBundle}@${res.version ?? "latest"}`;
 }

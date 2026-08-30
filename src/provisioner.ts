@@ -104,6 +104,12 @@ export function projectBindings(
 		// to its own custom domain does not reliably loop back. Present on every
 		// instance so any of them can act as a control plane once configured.
 		{ type: "service", name: "SELF", service: rn },
+		// The instance's agent runtime (`@premium-cms/cloudflare/agents`): Workers AI,
+		// the plugin agents, the browser bridge and the build sandbox live in the
+		// instance, so a plugin's AI, storage and compute are billed to the account
+		// that hosts the instance — never to the platform.
+		{ type: "ai", name: "AI" },
+		...RUNTIME_CLASSES.map((c) => ({ type: "durable_object_namespace", name: c, class_name: c })),
 	];
 	// Fallback email provider credentials, read by the theme's trusted
 	// fallback-email provider from env. Only when a fallback is configured.
@@ -159,6 +165,16 @@ export async function createResources(
 	return p;
 }
 
+/** Durable Object classes the instance bundle exports for the agent runtime. */
+export const RUNTIME_CLASSES = ["PluginAgent", "BrowserBridge", "Sandbox"] as const;
+/** The build sandbox container (public image; Cloudflare pulls it itself). */
+export const RUNTIME_CONTAINERS = [{ class_name: "Sandbox", image: "docker.io/cloudflare/sandbox:0.12.9", max_instances: 5, instance_type: "basic" }];
+
+/** What every deploy of an instance sends besides bindings: the runtime's classes and container. */
+export function runtimeDeployFields(): { durableObjects: Array<{ class_name: string }>; containers: typeof RUNTIME_CONTAINERS } {
+	return { durableObjects: RUNTIME_CLASSES.map((class_name) => ({ class_name })), containers: RUNTIME_CONTAINERS };
+}
+
 /** Deploy service: upload the golden bundle for this project with its bindings. */
 export async function deployWorker(
 	ctx: PluginContext,
@@ -175,6 +191,7 @@ export async function deployWorker(
 		version: "latest",
 		bindings: projectBindings(p.rn, p, settings),
 		cron: "* * * * *",
+		...runtimeDeployFields(),
 	});
 	return p;
 }

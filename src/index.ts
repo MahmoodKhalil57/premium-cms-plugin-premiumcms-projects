@@ -43,8 +43,7 @@ import {
 	isUlid,
 	projectBindings,
 	provisionAll,
-	resourceName,
-} from "./provisioner.js";
+	resourceName, runtimeDeployFields } from "./provisioner.js";
 import { type Settings, credsOf, readSettings, siteZone, validate } from "./settings.js";
 import { childSetOptions, grantCredits, pushCreditsSettings } from "./credits.js";
 import { checkoutSessionIdFromEvent, createCheckout, retrieveCheckoutSession } from "./stripe.js";
@@ -365,6 +364,7 @@ async function enableFrontend(
 		version: "latest",
 		bindings,
 		cron: "* * * * *",
+		...runtimeDeployFields(),
 	});
 
 	await d1Query(
