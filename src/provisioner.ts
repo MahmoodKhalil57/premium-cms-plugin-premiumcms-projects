@@ -220,9 +220,14 @@ export async function attachDomain(
 }
 
 /**
- * (a) Poke the child's root once so its first-boot migrations + auto-seed run,
- * then (b) insert the owner user + the setup-complete option straight into the
- * child's D1. Both statements are idempotent, so re-running is safe.
+ * (a) Poke the child's backend so its first-boot migrations + auto-seed run —
+ * a backend path, not `/`: the instance answers a fresh child's root with its
+ * "frontend not connected" page before the runtime ever starts, so a poke at
+ * `/` migrates nothing and the owner insert below fails with "no such table:
+ * users" on every tick. The poke repeats until the schema is there (a cold
+ * worker may 5xx once), then (b) inserts the owner user + the setup-complete
+ * option straight into the child's D1. Both statements are idempotent, so
+ * re-running is safe.
  */
 export async function bootstrapOwner(
 	ctx: PluginContext,
@@ -233,12 +238,21 @@ export async function bootstrapOwner(
 	if (!p.d1_id) throw new Error("d1 not created yet");
 	const creds = credsOf(settings);
 
-	// (a) Trigger first boot. Ignore the result — a cold worker may 5xx once.
-	try {
-		if (ctx.http) await ctx.http.fetch(`https://${p.hostname}/`, { method: "GET" });
-	} catch {
-		// non-fatal — the D1 writes below create the rows regardless
+	// (a) Trigger first boot and wait for the schema (the request runs the
+	// migrations before it answers; a cold worker may still 5xx once).
+	let migrated = false;
+	for (let attempt = 0; attempt < 3 && !migrated; attempt++) {
+		try {
+			if (ctx.http) await ctx.http.fetch(`https://${p.hostname}/_emdash/api/manifest`, { method: "GET", headers: { "X-EmDash-Request": "1" } });
+		} catch {
+			// non-fatal — checked below
+		}
+		const probe = await d1Query(ctx, creds, p.d1_id, "SELECT name FROM sqlite_master WHERE type='table' AND name='users'");
+		const rows = (probe.result as Array<{ results?: unknown[] }> | undefined)?.[0]?.results ?? [];
+		migrated = probe.success && rows.length > 0;
+		if (!migrated && attempt < 2) await new Promise((r) => setTimeout(r, 2000));
 	}
+	if (!migrated) throw new Error(`child ${p.hostname} has not run its first-boot migrations yet (no users table) — retrying on the next tick`);
 
 	const now = new Date().toISOString();
 	const email = (ownerEmail || settings.ownerEmail || "").trim();
