@@ -18,6 +18,8 @@ export const DEFAULT_MARKETPLACE_URL = "https://marketplace.premium-cms.com";
 const ACCOUNT_ID_RE = /^[0-9a-f]{32}$/;
 
 export interface Settings {
+	/** Marketplace plugins installed into every new project (comma-separated ids). */
+	defaultPlugins: string;
 	/** User-configured, shown on the settings form. */
 	cfAccountId: string;
 	cfApiToken: string;
@@ -142,6 +144,7 @@ export async function readSettings(ctx: PluginContext): Promise<Settings> {
 			githubFrontendTemplate: asString(map.githubFrontendTemplate).trim(),
 			customDomainsKvId: asString(map.customDomainsKvId).trim(),
 			marketplaceSeedToken: asString(map.marketplaceSeedToken).trim(),
+	defaultPlugins: asString(map.defaultPlugins).trim() || "premium-github-agent, premium-cms-agent",
 			pluginTemplate:
 				asString(map.pluginTemplate).trim() || "MahmoodKhalil57/premium-cms-plugin-template",
 			instanceBundle: asString(map.instanceBundle).trim() || "instance",
@@ -178,6 +181,7 @@ export async function readSettings(ctx: PluginContext): Promise<Settings> {
 			marketplaceUrl: DEFAULT_MARKETPLACE_URL,
 			ownerEmail: "",
 			deployKey: "",
+			defaultPlugins: "premium-github-agent, premium-cms-agent",
 		};
 	}
 }

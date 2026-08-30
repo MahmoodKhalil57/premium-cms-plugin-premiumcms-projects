@@ -34,7 +34,7 @@ import {
 } from "./cf.js";
 import { pushCreditsSettings, seedInitialCredits } from "./credits.js";
 import { COLLECTION } from "./content.js";
-import { mintPlatformToken } from "./platform.js";
+import { childApi, mintPlatformToken, platformToken } from "./platform.js";
 import { applyThemeSeed, themeIdFor } from "./themes.js";
 import { deleteCustomHostname, findCustomHostname, hostnamesRoutedTo, unmapDomain } from "./domains.js";
 import { deleteTheme } from "./marketplace.js";
@@ -176,6 +176,37 @@ export function runtimeDeployFields(): { durableObjects: Array<{ class_name: str
 }
 
 /** Deploy service: upload the golden bundle for this project with its bindings. */
+/** Install the platform's default marketplace plugins into a freshly provisioned child. */
+async function installDefaultPlugins(
+	ctx: PluginContext,
+	settings: Settings,
+	project: string,
+	url: string,
+): Promise<void> {
+	const ids = settings.defaultPlugins
+		.split(",")
+		.map((s) => s.trim())
+		.filter(Boolean);
+	if (ids.length === 0) return;
+	const token = await platformToken(ctx, project);
+	if (!token) {
+		ctx.log.warn(`[premiumcms-projects] ${project}: no platform token — default plugins not installed`);
+		return;
+	}
+	for (const id of ids) {
+		try {
+			const r = await childApi(ctx, url, token, "POST", `/_emdash/api/admin/plugins/marketplace/${encodeURIComponent(id)}/install`, {
+				confirmMcpTools: true,
+			});
+			if (r.ok) ctx.log.info(`[premiumcms-projects] ${project}: plugin ${id} installed`);
+			else if (r.status === 409) ctx.log.info(`[premiumcms-projects] ${project}: plugin ${id} already installed`);
+			else ctx.log.warn(`[premiumcms-projects] ${project}: plugin ${id} install ${r.status}: ${r.text.slice(0, 120)}`);
+		} catch (err) {
+			ctx.log.warn(`[premiumcms-projects] ${project}: plugin ${id} install failed`, err);
+		}
+	}
+}
+
 export async function deployWorker(
 	ctx: PluginContext,
 	settings: Settings,
@@ -337,6 +368,11 @@ export async function provisionAll(
 	} catch (err) {
 		ctx.log.warn(`[premiumcms-projects] ${id}: theme seed not applied`, err);
 	}
+
+	// 6b. the platform's default plugins, so a fresh project can build its
+	// frontend (GitHub agent) and offer the toolbar assistant from day one.
+	// Best-effort per plugin: a failed install logs and provisioning goes on.
+	await installDefaultPlugins(ctx, settings, id, url);
 
 	// 7. write back ONLY the url (also the "already provisioned" marker).
 	if (ctx.content?.update) await ctx.content.update(COLLECTION, id, { url });

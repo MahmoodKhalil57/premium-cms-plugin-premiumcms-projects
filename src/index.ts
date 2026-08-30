@@ -218,6 +218,13 @@ const SETTINGS_SCHEMA: SettingsSchema = {
 		description:
 			"The golden bundle every provisioned instance runs (themes are repos + seeds, not bundles). Default: instance.",
 	},
+	defaultPlugins: {
+		type: "string",
+		label: "Default plugins for new projects",
+		description:
+			"Marketplace plugin ids (comma-separated) installed into every project right after provisioning. The GitHub agent builds and previews the site; the Site Agent is the toolbar assistant.",
+		default: "premium-github-agent, premium-cms-agent",
+	},
 	marketplaceSeedToken: {
 		type: "secret",
 		label: "Marketplace publisher token",
