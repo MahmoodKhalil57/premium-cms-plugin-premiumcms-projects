@@ -186,6 +186,7 @@ async function rollPlugins(ctx: PluginContext, t: Target): Promise<string> {
 		list.json<{ data?: { items?: Array<{ pluginId?: string; latestVersion?: string }> } }>().data
 			?.items ?? [];
 	let updated = 0;
+	let current = 0;
 	const failed: string[] = [];
 	for (const it of items) {
 		if (!it.pluginId) continue;
@@ -203,10 +204,12 @@ async function rollPlugins(ctx: PluginContext, t: Target): Promise<string> {
 			},
 		);
 		if (r.ok) updated++;
+		// The child answers 409 (ALREADY_UP_TO_DATE) for a plugin that already runs the latest version.
+		else if (r.status === 409) current++;
 		else failed.push(`${it.pluginId} ${r.status}`);
 	}
 	if (failed.length) throw new Error(`updated ${updated}, failed: ${failed.join(", ")}`);
-	return `updated ${updated} of ${items.length}`;
+	return `updated ${updated} of ${items.length}${current ? ` (${current} already current)` : ""}`;
 }
 
 async function rollSeed(ctx: PluginContext, settings: Settings, t: Target): Promise<string> {
