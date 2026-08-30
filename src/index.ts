@@ -326,19 +326,11 @@ async function enableFrontend(
 	const gen = await createFromTemplate(ctx, token, template, owner, repo, label || project);
 	if (!gen.ok) throw new Error(gen.error || "repo create failed");
 
-	const previewSecret = `prev_${crypto.randomUUID().replace(/-/g, "")}`;
-	await d1Query(
-		ctx,
-		creds,
-		d1Id,
-		"INSERT INTO options (name,value) VALUES ('emdash:preview_secret', ?) ON CONFLICT(name) DO UPDATE SET value = excluded.value",
-		[JSON.stringify(previewSecret)],
-	);
-
+	// The build reads the snapshot with the child's own frontend service-account
+	// token (the instance creates it on first boot; Settings → frontend token).
 	for (const [name, value] of [
 		["BACKEND_URL", backendUrl],
 		["SITE_URL", backendUrl],
-		["EMDASH_PREVIEW_SECRET", previewSecret],
 		["SEED_SECRET", settings.deployKey],
 	] as Array<[string, string]>) {
 		const r = await setSecret(ctx, token, owner, repo, name, value);
